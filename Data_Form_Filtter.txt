@@ -1,0 +1,977 @@
+Option Explicit
+Dim sourceWorkbook As Workbook
+Dim sourceWorksheet As Worksheet
+Dim destinationWorkbook As Workbook
+Dim destinationWorksheet As Worksheet
+Dim currentWorksheet As Worksheet
+Dim sourceFilteredWorksheet As Worksheet
+Dim destinationFilteredWorksheet As Worksheet
+Dim DestinationBrowserName As String
+
+Private Sub ResetEntireRunManager(DestinationSheetName As String, dest_row_count As Long, ExecuteStatus_ColNumber As Long, _
+ Destination_Browser_ColNumber As Long, BrowserVersion_ColNumber As Long, _
+ BrowserVersionName As String, ExecuteStatus As String, tcNameAndqTestDescMappingArr As Variant, _
+ destination_QTestTCList_ColNumber As Integer, Destination_TC_ColNumber As Long, uniqueTCsCount As Integer, QTestTestCycleID_ColNumber As Integer, QTestTestCycleIDValue As String)
+ 
+ Dim i As Integer, j As Integer
+' uniqueTCsCount As Integer
+ Dim testCycleFullName As String
+ 
+ testCycleFullName = "CL-" & QTestTestCycleIDValue
+
+ For i = 2 To dest_row_count
+      Sheets(DestinationSheetName).Cells(i, ExecuteStatus_ColNumber).Value = ExecuteStatus
+      If StrComp(Sheets(DestinationSheetName).Cells(i, QTestTestCycleID_ColNumber).Value, testCycleFullName) <> 0 _
+        And StrComp(QTestTestCycleIDValue, "") <> 0 Then
+        Sheets(DestinationSheetName).Cells(i, QTestTestCycleID_ColNumber).Value = testCycleFullName
+      End If
+'      Sheets(DestinationSheetName).Cells(i, Destination_Browser_ColNumber).Value = DestinationBrowserName
+ Next
+    
+' uniqueTCsCount = UBound(tcNameAndqTestDescMappingArr, 1) - LBound(tcNameAndqTestDescMappingArr, 1)
+' MsgBox ("Unique Test Cases Count For Run Manager: " & uniqueTCsCount)
+ 
+ If uniqueTCsCount <> 0 Then
+    For i = 0 To uniqueTCsCount
+    
+       For j = 2 To dest_row_count
+       
+           If StrComp(tcNameAndqTestDescMappingArr(i, 0), _
+               Sheets(DestinationSheetName).Cells(j, Destination_TC_ColNumber)) = 0 Then
+               Sheets(DestinationSheetName).Cells(j, destination_QTestTCList_ColNumber).Value = _
+                       tcNameAndqTestDescMappingArr(i, 1)
+                       
+               Exit For
+           
+           End If
+       Next j
+    Next i
+ End If
+     
+End Sub
+
+Function FindColumnNumber(wsSheet As Worksheet, ColName As String) As Integer
+    Dim i As Integer, index As Integer
+    i = 0
+    index = 0
+    For i = 1 To 30
+     If ColName = wsSheet.Cells(1, i).Value Then
+       index = i
+       Exit For
+     End If
+    Next
+       ' MsgBox ColName & " Has Index ::: " & index
+    FindColumnNumber = index
+    
+End Function
+
+Private Sub DestinationFileDialogButton_Click()
+Dim myFile As FileDialog
+Dim FileSelected As String, Arr() As String
+
+Set myFile = Application.FileDialog(msoFileDialogOpen)
+With myFile
+.Title = "Select Destination WorkBook(Run Manager.xlsm)"
+.AllowMultiSelect = False
+.Filters.Clear
+.Filters.Add "Excel WorkBook", "*.xlsm"
+
+If .Show <> -1 Then
+Exit Sub
+End If
+FileSelected = .SelectedItems(1)
+End With
+
+'Display File Path of Source WorkBook
+Data_Form_Filter.DestinationFilePath.Text = FileSelected 'The file path
+
+Arr() = Split(FileSelected, "\")
+'Display Destination WorkBook Name
+Data_Form_Filter.DestinationWorkBookName.Text = Arr(UBound(Arr))
+End Sub
+
+Private Sub FileDialogButton_Click()
+
+Dim myFile As FileDialog
+Dim FileSelected As String, Arr() As String
+
+Set myFile = Application.FileDialog(msoFileDialogOpen)
+With myFile
+.Title = "Select Source WorkBook(Execution Report)"
+.AllowMultiSelect = False
+.Filters.Clear
+.Filters.Add "Excel WorkBook", "*.xls?"
+
+If .Show <> -1 Then
+Exit Sub
+End If
+FileSelected = .SelectedItems(1)
+End With
+
+'Display File Path of Source WorkBook
+Data_Form_Filter.FilePath.Text = FileSelected 'The file path
+
+Arr() = Split(FileSelected, "\")
+'Display Source WorkBook Name
+Data_Form_Filter.SourceWorkBookName.Text = Arr(UBound(Arr))
+
+End Sub
+
+Private Sub UserForm_Initialize()
+
+With Data_Form_Filter.SourceSheetName
+.AddItem "Regression"
+.AddItem "Regression_NEW"
+.AddItem "Functional"
+.AddItem "Functional_NEW"
+
+Data_Form_Filter.SourceSheetName.Text = Data_Form_Filter.SourceSheetName.List(0)
+
+End With
+
+Data_Form_Filter.BrowserNameComboBox.List = Worksheets("ListSource").Range("H1:H15").Value
+Data_Form_Filter.BrowserNameComboBox.Text = Data_Form_Filter.BrowserNameComboBox.List(0)
+
+With Data_Form_Filter.ExecutionStatusComboBox
+.AddItem "Yes"
+.AddItem "No"
+
+Data_Form_Filter.ExecutionStatusComboBox.Text = Data_Form_Filter.ExecutionStatusComboBox.List(0)
+
+End With
+
+With Data_Form_Filter.DestinationSheetNameComboBox
+.AddItem "Regression"
+.AddItem "Functional"
+.AddItem "Smoke"
+
+Data_Form_Filter.DestinationSheetNameComboBox.Text = Data_Form_Filter.DestinationSheetNameComboBox.List(0)
+
+End With
+
+End Sub
+
+Sub CopyPassedTCsFiltered(SourceSheetName As String, BrowserVersionName As String, _
+       RegressionFilterCheckBoxValue As String, InSprintFilterCheckBoxValue As String, FailedCheckBoxValue As String, _
+       NoRunCheckBoxValue As String, DestinationSheetName As String, _
+       ExecutionStatus As String, ButtonNumber As Integer, DestinationWorkBookName As String, _
+       DestinationFilePath As String, PassedCheckBoxValue As String, QTestTestCycleIDValue As String)
+
+     ActiveWorkbook.CheckCompatibility = False
+     Application.DisplayAlerts = False
+     Application.ScreenUpdating = False
+
+   '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+   '                         COPYING FILTERED EXECUTION SUMMARY REPORT TO THE DESTINATION WORKBOOK           '
+   '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+   Dim TestCaseColumnName As String
+   Dim source_sheet_row_count As Long, source_sheet_col_count As Long
+   Dim Source_TC_ColNumber As Integer, Source_TC_StatusColNumber As Integer, _
+   Source_AutomationScope_ColNumber As Integer
+   Dim Source_BrowserVersionName_ColNumber As Integer
+   Dim AutomationScope_ColumnName As String
+   Dim sourceWorkbookFilePath As String
+   Dim SourceWorkBookName As String
+   Dim col As Integer
+   
+   Dim i As Long, j As Long, filtered_report_row_count As Long, dest_row_count As Long, _
+   count As Long, Destination_TC_ColNumber As Long, ExecuteStatus_ColNumber As Long, _
+   Destination_Browser_ColNumber As Long, BrowserVersion_ColNumber As Long
+   Dim TCName As String, ExecuteStatus As String, _
+   Destination_TC_Col_Name As String, _
+   Filtered_TC_Name As String, _
+   Filtered_Automation_Status_Name As String, _
+   Filtered_Browser_Status As String, _
+   Destination_BrowserColumnName As String, _
+   BrowserVersion_ColumnName As String
+   
+   Dim flag As Integer, fail_count As Long
+   
+   ''' QTestTCList Related '''
+   Dim QTestTCListColumnName As String
+   Dim QTestTCList_ColNumber As Integer
+   Dim functionalTestCaseColumnName As String
+   Dim functionalTestCase_ColNumber As Integer
+   Dim allAutomationTestCasesArr() As Variant
+   Dim uniqueAutomationTestCasesArr As Variant
+   Dim destination_QTestTCList_ColNumber As Integer
+   Dim uniqueTC_Count As Integer
+   Dim QTestTestCycleIDColumnName As String
+   Dim QTestTestCycleID_ColNumber As Integer
+   
+   functionalTestCaseColumnName = "F_TC_ID"
+   QTestTCListColumnName = "QTestTCList"
+   QTestTestCycleIDColumnName = "TestCycle"
+   uniqueTC_Count = 0
+      
+   'Initializing Variables
+   DestinationBrowserName = "CHROME"
+      
+    TestCaseColumnName = "Auto_TS_ID_Desktop"
+    AutomationScope_ColumnName = "Scope"
+      
+   Destination_TC_Col_Name = "TestCase"
+   ExecuteStatus = "Execute"
+   Destination_BrowserColumnName = "Browser"
+   BrowserVersion_ColumnName = "BrowserVersion"
+   count = 0
+   Set sourceWorkbook = ThisWorkbook
+   sourceWorkbookFilePath = sourceWorkbook.Path
+   SourceWorkBookName = sourceWorkbook.Name
+   
+   'Check if WorkSheet Exists
+    If isWorkSheetExist("Filtered Execution Report") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Filtered Execution Report")
+         
+    End If
+      
+    'Create new WorkSheet in Source Workbook
+     sourceWorkbook.Worksheets.Add(After:=Worksheets(Worksheets.count)).Name = "Filtered Execution Report"
+    
+    'Check if WorkSheet Exists
+    If isWorkSheetExist("Summary Report Copy") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Summary Report Copy")
+         
+    End If
+      
+'    MsgBox ("DestinationFilePath : " & DestinationFilePath)
+    
+    Workbooks.Open (DestinationFilePath)
+    Windows(DestinationWorkBookName).Activate
+    Set destinationWorkbook = ActiveWorkbook
+    
+    'Check if WorkSheet Exists
+    If isWorkSheetExist("Summary Report Copy") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Summary Report Copy")
+         
+    End If
+    
+      'Check if WorkSheet Exists
+    If isWorkSheetExist("Filtered Execution Report") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Filtered Execution Report")
+      
+    End If
+    
+      'Create new WorkSheet in Destination Workbook
+      destinationWorkbook.Worksheets.Add(After:=Worksheets(Worksheets.count)).Name = "Filtered Execution Report"
+    
+    'Set Column Width for 'Filtered Execution Report' Sheet
+    Set currentWorksheet = Sheets("Filtered Execution Report")
+    currentWorksheet.Select
+    
+   'Setting Column Width
+    Call SetColumnWidth(currentWorksheet, "A")
+    Call SetColumnWidth(currentWorksheet, "B")
+    Call SetColumnWidth(currentWorksheet, "C")
+     
+     'Check if WorkSheet Exists
+    If isWorkSheetExist("Failed To Update TCs") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Failed To Update TCs")
+      
+    End If
+    
+      'Create new WorkSheet in Destination Workbook
+      destinationWorkbook.Worksheets.Add(After:=Worksheets(Worksheets.count)).Name = "Failed To Update TCs"
+    
+    'Set Column Width for 'Failed To Update TCs' Sheet
+    Set currentWorksheet = Sheets("Failed To Update TCs")
+    currentWorksheet.Select
+    
+   'Setting Column Width
+    Call SetColumnWidth(currentWorksheet, "A")
+    Call SetColumnWidth(currentWorksheet, "B")
+    Call SetColumnWidth(currentWorksheet, "C")
+    
+    'Setting Column Names
+    currentWorksheet.Cells(1, 1) = "AUTOMATION TEST CASE ID"
+    currentWorksheet.Cells(1, 2) = "AUTOMATION STATUS"
+    currentWorksheet.Cells(1, 3) = "BROWSER STATUS"
+    
+    'Format Column Headers
+    For col = 1 To 3
+    Cells(1, col).Interior.Color = RGB(33, 89, 103)
+    Cells(1, col).Font.ColorIndex = 2
+    Cells(1, col).HorizontalAlignment = xlCenter
+    Next
+    
+    Windows(DestinationWorkBookName).Activate
+   ' MsgBox "DestinationSheetName = " & DestinationSheetName
+    Set destinationWorksheet = Sheets(DestinationSheetName)
+    destinationWorksheet.Select
+    destinationWorksheet.AutoFilterMode = False
+    dest_row_count = destinationWorksheet.UsedRange.Rows.count
+  '  MsgBox "dest_row_count = " & dest_row_count
+
+    'Finding Column Numbers of Column Names
+    Destination_TC_ColNumber = FindColumnNumber(destinationWorksheet, Destination_TC_Col_Name)
+    ExecuteStatus_ColNumber = FindColumnNumber(destinationWorksheet, ExecuteStatus)
+    Destination_Browser_ColNumber = FindColumnNumber(destinationWorksheet, Destination_BrowserColumnName)
+    BrowserVersion_ColNumber = FindColumnNumber(destinationWorksheet, BrowserVersion_ColumnName)
+    
+    ''' QTestTCList Realted '''
+    destination_QTestTCList_ColNumber = FindColumnNumber(destinationWorksheet, QTestTCListColumnName)
+    QTestTestCycleID_ColNumber = FindColumnNumber(destinationWorksheet, QTestTestCycleIDColumnName)
+   
+    'Open Source WorkBook
+    sourceWorkbook.Activate
+    'Windows(ThisWorkbook.Name).Activate
+    Set sourceWorksheet = Sheets(SourceSheetName)
+    sourceWorksheet.Select
+    
+    source_sheet_row_count = sourceWorksheet.UsedRange.Rows.count
+    source_sheet_col_count = sourceWorksheet.UsedRange.Columns.count
+    
+    sourceWorksheet.AutoFilterMode = False
+    
+    Source_BrowserVersionName_ColNumber = FindColumnNumber(sourceWorksheet, BrowserVersionName)
+    Source_AutomationScope_ColNumber = FindColumnNumber(sourceWorksheet, AutomationScope_ColumnName)
+    Source_TC_ColNumber = FindColumnNumber(sourceWorksheet, TestCaseColumnName)
+    
+    
+    ''''''''''''''''''''''''''' Code To Add QTestTCList Value ''''''''''''''''''''''
+    If ButtonNumber = 2 Then
+    
+        Dim allTC_Count As Integer
+        allTC_Count = 0
+        uniqueTC_Count = 0
+        
+        functionalTestCase_ColNumber = FindColumnNumber(sourceWorksheet, functionalTestCaseColumnName)
+        QTestTCList_ColNumber = FindColumnNumber(sourceWorksheet, QTestTCListColumnName)
+        
+        ''' Get All Automation Test Cases Names In An Array'''
+        ReDim allAutomationTestCasesArr(0 To (source_sheet_row_count - 1))
+        For i = 2 To source_sheet_row_count
+            If StrComp(sourceWorksheet.Cells(i, Source_TC_ColNumber), "") <> 0 Then
+                allAutomationTestCasesArr(allTC_Count) = sourceWorksheet.Cells(i, Source_TC_ColNumber)
+                allTC_Count = allTC_Count + 1
+            End If
+        Next i
+        
+        ''' uniqueAutomationTestCasesArr = RemoveDupesColl(allAutomationTestCasesArr)
+        uniqueAutomationTestCasesArr = eliminateDuplicate(allAutomationTestCasesArr)
+        uniqueTC_Count = UBound(uniqueAutomationTestCasesArr)
+'        MsgBox ("uniqueTC_Count : " & uniqueTC_Count)
+        
+        Dim tcNameAndqTestDescMappingArr As Variant
+        ReDim tcNameAndqTestDescMappingArr(uniqueTC_Count, 2)
+        
+        Dim str As String
+        Dim qTestDescStr As String
+        For i = 0 To uniqueTC_Count
+            qTestDescStr = ""
+            str = uniqueAutomationTestCasesArr(i)
+            tcNameAndqTestDescMappingArr(i, 0) = str
+            
+            Dim cl As Range, rng As Range
+            
+            Set rng = sourceWorksheet.Range(sourceWorksheet.Cells(1, 1), _
+                        sourceWorksheet.Cells(1, source_sheet_col_count))
+                        
+'            MsgBox (tcNameAndqTestDescMappingArr(i, 0))
+            
+            sourceWorksheet.AutoFilterMode = False
+            
+            rng.Select
+    
+            Selection.AutoFilter
+        
+            sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_TC_ColNumber), _
+                sourceWorksheet.Cells(2, Source_TC_ColNumber)) _
+                    .AutoFilter Field:=Source_TC_ColNumber, Criteria1:="=" & str, _
+                        Operator:=xlFilterValues
+            
+            For Each cl In sourceWorksheet.AutoFilter.Range.Columns(functionalTestCase_ColNumber) _
+                        .SpecialCells(xlCellTypeVisible)
+                        
+                If StrComp(cl, functionalTestCaseColumnName) <> 0 Then
+                    If StrComp(qTestDescStr, "") = 0 Then
+                        qTestDescStr = cl
+                    Else
+                        qTestDescStr = qTestDescStr & "~" & cl
+                    End If
+                End If
+            Next
+            
+            tcNameAndqTestDescMappingArr(i, 1) = qTestDescStr
+'            MsgBox (tcNameAndqTestDescMappingArr(i, 1))
+            
+            For Each cl In sourceWorksheet.AutoFilter.Range.Columns(QTestTCList_ColNumber) _
+                        .SpecialCells(xlCellTypeVisible)
+                
+                If StrComp(cl, QTestTCListColumnName) <> 0 Then
+                    cl.Value = qTestDescStr
+                End If
+                        
+            Next
+        Next i
+    
+    End If
+    
+    ''''''''''''''''''''''''' End Of Code To Add QTestTCList Value ''''''''''''''''''''''''''''''''
+           
+    sourceWorksheet.AutoFilterMode = False
+     
+    sourceWorksheet.Range(sourceWorksheet.Cells(1, 1), _
+    sourceWorksheet.Cells(1, source_sheet_col_count)).Select
+
+    Selection.AutoFilter
+    
+    'Apply Automation Scope Filter Option(s) As Selected
+    If RegressionFilterCheckBoxValue = True And InSprintFilterCheckBoxValue = True Then
+    
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_AutomationScope_ColNumber), _
+       sourceWorksheet.Cells(2, Source_AutomationScope_ColNumber)) _
+       .AutoFilter Field:=Source_AutomationScope_ColNumber, Criteria1:=Array("Regression", "In-Sprint"), _
+       Operator:=xlFilterValues
+
+    ElseIf RegressionFilterCheckBoxValue = True And InSprintFilterCheckBoxValue = False Then
+    
+      sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_AutomationScope_ColNumber), _
+      sourceWorksheet.Cells(2, Source_AutomationScope_ColNumber)) _
+       .AutoFilter Field:=Source_AutomationScope_ColNumber, Criteria1:="=Regression"
+    
+    Else
+       
+      sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_AutomationScope_ColNumber), _
+      sourceWorksheet.Cells(2, Source_AutomationScope_ColNumber)) _
+       .AutoFilter Field:=Source_AutomationScope_ColNumber, Criteria1:="=In-Sprint"
+       
+    End If
+    
+    i = 0
+    j = 0
+    flag = 0
+    fail_count = 0
+    
+    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    '                                    If Button 2 (Update Entire Run Manager) is Clicked                                                  '
+    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    
+    If ButtonNumber = 2 Then
+    
+     'Copy Source Filtered Automation Test Case Column
+     ThisWorkbook.Activate
+     ActiveWorkbook.Sheets(SourceSheetName).Range(Sheets(SourceSheetName).Cells(1, Source_TC_ColNumber), _
+     Sheets(SourceSheetName).Cells(source_sheet_row_count, Source_TC_ColNumber)) _
+     .Copy sourceWorkbook.Sheets("Filtered Execution Report").Cells(1, 1)
+     
+     'Copy Source Filtered Automation Scope Column
+     ActiveWorkbook.Sheets(SourceSheetName).Range(Sheets(SourceSheetName).Cells(1, Source_AutomationScope_ColNumber), _
+     Sheets(SourceSheetName).Cells(source_sheet_row_count, Source_AutomationScope_ColNumber)) _
+     .Copy ActiveWorkbook.Sheets("Filtered Execution Report").Cells(1, 2)
+     
+     'Copy Source Filtered qTestDesription Column
+     ActiveWorkbook.Sheets(SourceSheetName).Range(Sheets(SourceSheetName).Cells(1, QTestTCList_ColNumber), _
+     Sheets(SourceSheetName).Cells(source_sheet_row_count, QTestTCList_ColNumber)) _
+     .Copy ActiveWorkbook.Sheets("Filtered Execution Report").Cells(1, 3)
+    
+     Set sourceFilteredWorksheet = Sheets("Filtered Execution Report")
+     sourceFilteredWorksheet.Select
+     filtered_report_row_count = sourceFilteredWorksheet.UsedRange.Rows.count
+   ' MsgBox "filtered_report_row_count before = " & filtered_report_row_count
+
+    'Remove Duplicate Rows
+    sourceFilteredWorksheet. _
+    Range(sourceFilteredWorksheet.Cells(1, 1), _
+    sourceFilteredWorksheet.Cells(filtered_report_row_count, 3)). _
+    RemoveDuplicates Columns:=1, Header:=xlNo
+    
+    filtered_report_row_count = sourceFilteredWorksheet.UsedRange.Rows.count
+   ' MsgBox "filtered_report_row_count after = " & filtered_report_row_count
+    
+    'Copy 'Filtered Execution Report' Sheet to Destination Workbook.
+     ActiveWorkbook.Sheets("Filtered Execution Report").Range(Sheets("Filtered Execution Report").Cells(1, 1), _
+     Sheets("Filtered Execution Report").Cells(filtered_report_row_count, 3)).Select
+     Selection.Copy
+     
+     destinationWorkbook.Activate
+     Sheets("Filtered Execution Report").Select
+     ActiveSheet.Paste
+     ActiveSheet.Cells(2, 1).Select
+     Application.CutCopyMode = False
+     ActiveWorkbook.Save
+     
+     sourceWorkbook.Activate
+     'Check if WorkSheet Exists
+     If isWorkSheetExist("Filtered Execution Report") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Filtered Execution Report")
+         
+     End If
+     
+   '  sourceWorkbook.Close True
+     
+      Application.ScreenUpdating = False
+    
+    'Resetting Execution Status of All Test Cases To 'No' and Setting Browser Name and Browser Version As Specified
+      destinationWorkbook.Activate
+      destinationWorksheet.Select
+      destinationWorksheet.AutoFilterMode = False
+      Set destinationFilteredWorksheet = Sheets("Filtered Execution Report")
+      filtered_report_row_count = destinationFilteredWorksheet.UsedRange.Rows.count
+    
+      Call ResetEntireRunManager(DestinationSheetName, dest_row_count, ExecuteStatus_ColNumber, _
+           Destination_Browser_ColNumber, BrowserVersion_ColNumber, BrowserVersionName, "No", _
+           tcNameAndqTestDescMappingArr, destination_QTestTCList_ColNumber, Destination_TC_ColNumber, uniqueTC_Count, QTestTestCycleID_ColNumber, QTestTestCycleIDValue)
+    
+       For i = 2 To filtered_report_row_count
+         destinationFilteredWorksheet.Select
+         Filtered_TC_Name = destinationFilteredWorksheet.Cells(i, 1).Value
+         Filtered_Automation_Status_Name = destinationFilteredWorksheet.Cells(i, 2).Value
+         destinationWorksheet.Select
+         flag = 0
+         For j = 2 To dest_row_count
+           
+             'ACTUAL RUN MANAGER BEING UPDATED
+              If destinationWorksheet.Cells(j, Destination_TC_ColNumber).Value = Filtered_TC_Name Then
+                 destinationWorksheet.Cells(j, ExecuteStatus_ColNumber).Value = ExecutionStatus
+                  count = count + 1
+                  flag = 1
+              End If
+                    
+          Next j
+          
+          If flag = 0 And Filtered_TC_Name <> "" Then
+              fail_count = fail_count + 1
+              Sheets("Failed To Update TCs").Cells((fail_count + 1), 1) = Filtered_TC_Name
+              Sheets("Failed To Update TCs").Cells((fail_count + 1), 2) = Filtered_Automation_Status_Name
+              
+          End If
+                 
+    Next i
+    
+    Application.DisplayAlerts = False
+    sourceWorkbook.Activate
+    Sheets(SourceSheetName).Select
+    
+    sourceWorkbook.Save
+    MsgBox "Total Execution Status Updated = " & count & " , Failed To Update = " & fail_count
+    destinationWorkbook.Activate
+    
+    Sheets("Failed To Update TCs").Select
+    'Align text to center in each cell
+     ActiveWorkbook.Sheets("Failed To Update TCs").Range(Sheets("Failed To Update TCs").Cells(1, 1), _
+     Sheets("Failed To Update TCs").Cells((fail_count + 1), 2)).Select
+     Selection.HorizontalAlignment = xlCenter
+     ActiveSheet.Cells(2, 1).Select
+       
+     destinationWorksheet.Select
+    'Filter Sheet with Execution Status as 'Yes'
+    ActiveWindow.ActiveSheet.AutoFilterMode = False
+    destinationWorksheet.Range("A1:Z1") _
+       .AutoFilter Field:=ExecuteStatus_ColNumber, Criteria1:="=" & ExecutionStatus
+    destinationWorkbook.Save
+    
+    'Release Destination Workbook and Current Workbook Resources
+     Set destinationWorkbook = Nothing
+     Set destinationWorksheet = Nothing
+     Set destinationFilteredWorksheet = Nothing
+     Set sourceWorkbook = Nothing
+     Set sourceFilteredWorksheet = Nothing
+     Set sourceWorksheet = Nothing
+    
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+                            
+    Exit Sub
+    
+    End If
+    
+    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    '                                       End of Button 2 Function                                               '
+    ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+        
+    
+    'Apply Browser Status Filter Option(s) As Selected
+    If FailedCheckBoxValue = True And NoRunCheckBoxValue = True And PassedCheckBoxValue = False Then
+    
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_BrowserVersionName_ColNumber), _
+       sourceWorksheet.Cells(2, Source_BrowserVersionName_ColNumber)) _
+       .AutoFilter Field:=Source_BrowserVersionName_ColNumber, Criteria1:=Array("Failed", "Unexecuted"), _
+       Operator:=xlFilterValues
+
+    ElseIf FailedCheckBoxValue = False And NoRunCheckBoxValue = True And PassedCheckBoxValue = False Then
+    
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_BrowserVersionName_ColNumber), _
+       sourceWorksheet.Cells(2, Source_BrowserVersionName_ColNumber)) _
+       .AutoFilter Field:=Source_BrowserVersionName_ColNumber, Criteria1:="=Unexecuted"
+    
+    ElseIf FailedCheckBoxValue = True And NoRunCheckBoxValue = False And PassedCheckBoxValue = False Then
+       
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_BrowserVersionName_ColNumber), _
+       sourceWorksheet.Cells(2, Source_BrowserVersionName_ColNumber)) _
+       .AutoFilter Field:=Source_BrowserVersionName_ColNumber, Criteria1:="=Failed"
+       
+    ElseIf FailedCheckBoxValue = False And NoRunCheckBoxValue = False And PassedCheckBoxValue = True Then
+       
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_BrowserVersionName_ColNumber), _
+       sourceWorksheet.Cells(2, Source_BrowserVersionName_ColNumber)) _
+       .AutoFilter Field:=Source_BrowserVersionName_ColNumber, Criteria1:="=Passed"
+       
+    ElseIf FailedCheckBoxValue = True And NoRunCheckBoxValue = False And PassedCheckBoxValue = True Then
+       
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_BrowserVersionName_ColNumber), _
+       sourceWorksheet.Cells(2, Source_BrowserVersionName_ColNumber)) _
+       .AutoFilter Field:=Source_BrowserVersionName_ColNumber, Criteria1:=Array("Failed", "Passed"), _
+       Operator:=xlFilterValues
+       
+    ElseIf FailedCheckBoxValue = False And NoRunCheckBoxValue = True And PassedCheckBoxValue = True Then
+       
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_BrowserVersionName_ColNumber), _
+       sourceWorksheet.Cells(2, Source_BrowserVersionName_ColNumber)) _
+       .AutoFilter Field:=Source_BrowserVersionName_ColNumber, Criteria1:=Array("Unexecuted", "Passed"), _
+       Operator:=xlFilterValues
+       
+    ElseIf FailedCheckBoxValue = True And NoRunCheckBoxValue = True And PassedCheckBoxValue = True Then
+       
+       sourceWorksheet.Range(sourceWorksheet.Cells(1, Source_BrowserVersionName_ColNumber), _
+       sourceWorksheet.Cells(2, Source_BrowserVersionName_ColNumber)) _
+       .AutoFilter Field:=Source_BrowserVersionName_ColNumber, Criteria1:=Array("Failed", "Unexecuted", "Passed"), _
+       Operator:=xlFilterValues
+       
+    End If
+   
+    'Copy Source Filtered Automation Test Case Column
+     ActiveWorkbook.Sheets(SourceSheetName).Range(Sheets(SourceSheetName).Cells(1, Source_TC_ColNumber), _
+     Sheets(SourceSheetName).Cells(source_sheet_row_count, Source_TC_ColNumber)).Copy ThisWorkbook.Sheets("Filtered Execution Report").Cells(1, 1)
+     
+     'Copy Source Filtered Automation Status Column
+     ActiveWorkbook.Sheets(SourceSheetName).Range(Sheets(SourceSheetName).Cells(1, Source_AutomationScope_ColNumber), _
+     Sheets(SourceSheetName).Cells(source_sheet_row_count, Source_AutomationScope_ColNumber)).Copy ThisWorkbook.Sheets("Filtered Execution Report").Cells(1, 2)
+    
+    'Copy Source Filtered Browser Status Column
+     ActiveWorkbook.Sheets(SourceSheetName).Range(Sheets(SourceSheetName).Cells(1, Source_BrowserVersionName_ColNumber), _
+     Sheets(SourceSheetName).Cells(source_sheet_row_count, Source_BrowserVersionName_ColNumber)).Copy ThisWorkbook.Sheets("Filtered Execution Report").Cells(1, 3)
+     
+     Set sourceFilteredWorksheet = Sheets("Filtered Execution Report")
+     sourceFilteredWorksheet.Select
+     filtered_report_row_count = sourceFilteredWorksheet.UsedRange.Rows.count
+
+    'Remove Duplicate Rows
+    sourceFilteredWorksheet. _
+    Range(sourceFilteredWorksheet.Cells(1, 1), _
+    sourceFilteredWorksheet.Cells(filtered_report_row_count, 3)). _
+    RemoveDuplicates Columns:=1, Header:=xlNo
+    
+    filtered_report_row_count = sourceFilteredWorksheet.UsedRange.Rows.count
+    
+    'Copy 'Filtered Execution Report' Sheet to Destination Workbook.
+     ActiveWorkbook.Sheets("Filtered Execution Report").Range(Sheets("Filtered Execution Report").Cells(1, 1), _
+     Sheets("Filtered Execution Report").Cells(filtered_report_row_count, 3)).Select
+     
+     Selection.Copy
+     
+     destinationWorkbook.Activate
+     Sheets("Filtered Execution Report").Select
+     ActiveSheet.Paste
+     ActiveSheet.Cells(2, 1).Select
+     Application.CutCopyMode = False
+     ActiveWorkbook.Save
+     
+     sourceWorkbook.Activate
+     'Check if WorkSheet Exists
+     If isWorkSheetExist("Filtered Execution Report") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Filtered Execution Report")
+         
+     End If
+     
+   '  sourceWorkbook.Close True
+     
+      Application.ScreenUpdating = False
+     
+     
+   '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+   '                    SETTING EXECUTION STATUS OF FILTERED TEST CASES IN THE DESTINATION WORKSHEET               '
+   '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+   
+    
+    destinationWorkbook.Activate
+    Set destinationFilteredWorksheet = Sheets("Filtered Execution Report")
+    filtered_report_row_count = destinationFilteredWorksheet.UsedRange.Rows.count
+    destinationWorksheet.Select
+    
+    'Resetting Execution Status of All Test Cases To 'No' and Setting Browser Name and Browser Version As Specified
+      Call ResetEntireRunManager(DestinationSheetName, dest_row_count, ExecuteStatus_ColNumber, _
+      Destination_Browser_ColNumber, BrowserVersion_ColNumber, BrowserVersionName, "No", _
+      tcNameAndqTestDescMappingArr, destination_QTestTCList_ColNumber, Destination_TC_ColNumber, uniqueTC_Count, QTestTestCycleID_ColNumber, QTestTestCycleIDValue)
+        
+    For i = 2 To filtered_report_row_count
+         destinationFilteredWorksheet.Select
+         Filtered_TC_Name = destinationFilteredWorksheet.Cells(i, 1).Value
+         Filtered_Automation_Status_Name = destinationFilteredWorksheet.Cells(i, 2).Value
+         Filtered_Browser_Status = destinationFilteredWorksheet.Cells(i, 3).Value
+          
+         destinationWorksheet.Select
+         flag = 0
+         For j = 2 To dest_row_count
+           
+             'ACTUAL SHEET BEING UPDATED WITH EXECUTION_STATUS VALUE
+                 If destinationWorksheet.Cells(j, Destination_TC_ColNumber).Value = Filtered_TC_Name Then
+                   destinationWorksheet.Cells(j, ExecuteStatus_ColNumber).Value = "Yes"
+                   count = count + 1
+                   flag = 1
+                 End If
+                    
+          Next j
+          
+          If flag = 0 And Filtered_TC_Name <> "" Then
+              fail_count = fail_count + 1
+              Sheets("Failed To Update TCs").Cells((fail_count + 1), 1) = Filtered_TC_Name
+              Sheets("Failed To Update TCs").Cells((fail_count + 1), 2) = Filtered_Automation_Status_Name
+              Sheets("Failed To Update TCs").Cells((fail_count + 1), 3) = Filtered_Browser_Status
+          End If
+                 
+    Next i
+    
+    Application.DisplayAlerts = False
+    ActiveWorkbook.CheckCompatibility = False
+    sourceWorkbook.Activate
+    Sheets(SourceSheetName).Select
+    sourceWorkbook.Save
+    MsgBox "Total Execution Status Updated = " & count & " , Failed To Update = " & fail_count
+    destinationWorkbook.Activate
+    
+    Sheets("Failed To Update TCs").Select
+    'Align text to center in each cell
+     ActiveWorkbook.Sheets("Failed To Update TCs").Range(Sheets("Failed To Update TCs").Cells(1, 1), _
+     Sheets("Failed To Update TCs").Cells((fail_count + 1), 3)).Select
+     Selection.HorizontalAlignment = xlCenter
+     ActiveSheet.Cells(2, 1).Select
+    
+    destinationWorksheet.Select
+    'Filter Sheet with Execution Status as 'Yes'
+    ActiveWindow.ActiveSheet.AutoFilterMode = False
+    destinationWorksheet.Range("A1:Z1") _
+       .AutoFilter Field:=ExecuteStatus_ColNumber, Criteria1:="=Yes"
+    destinationWorkbook.Save
+    
+    'Release Destination Workbook and Current Workbook Resources
+    Set destinationWorkbook = Nothing
+    Set destinationWorksheet = Nothing
+    Set sourceWorkbook = Nothing
+    Set sourceFilteredWorksheet = Nothing
+    Set sourceWorksheet = Nothing
+     
+   ' ActiveWorkbook.CheckCompatibility = True
+    Application.ScreenUpdating = True
+    Application.DisplayAlerts = True
+
+End Sub
+
+Sub SetColumnWidth(srcSheet As Worksheet, ColumnName As String)
+
+   With srcSheet.Columns(ColumnName)
+       .ColumnWidth = .ColumnWidth * 5
+   End With
+
+End Sub
+
+Function isWorkSheetExist(WorkSheetName As String) As Boolean
+ 
+  'Check if Workbook Exists
+    Dim wsSheet As Worksheet
+    Dim f As Boolean
+    
+    On Error Resume Next
+    Set wsSheet = Sheets(WorkSheetName)
+    On Error GoTo 0
+    If Not wsSheet Is Nothing Then
+      f = True
+    Else
+      f = False
+    End If
+
+    isWorkSheetExist = f
+
+End Function
+
+Sub removeWorkSheet(WorkSheetName As String)
+
+    Application.DisplayAlerts = False
+       Sheets(WorkSheetName).Delete
+    Application.DisplayAlerts = True
+    
+End Sub
+
+Private Sub SubmitButton_Click()
+   
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     '                        If Button 1 (Update With Execution Report) Is CLicked                          '                  '
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+     Dim SourceSheetName As String, _
+     DestinationSheetName As String, BrowserVersionName As String, _
+     RegressionFilterCheckBoxValue As String, InSprintFilterCheckBoxValue As String, _
+     FailedCheckBoxValue As String, NoRunCheckBoxValue As String, _
+     ExecutionStatus As String, DestinationFilePath As String, _
+     PassedCheckBoxValue As String, _
+     QTestTestCycleIDValue As String
+     
+     Dim ButtonNumber1 As Integer
+     
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     '                                           TEST PARAMETERS                                             '
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     SourceSheetName = Data_Form_Filter.SourceSheetName.Text
+     BrowserVersionName = Data_Form_Filter.BrowserNameComboBox.Text
+     RegressionFilterCheckBoxValue = Data_Form_Filter.RegressionFilterCheckBox.Value
+     InSprintFilterCheckBoxValue = Data_Form_Filter.InSprintFilterCheckBox.Value
+     FailedCheckBoxValue = Data_Form_Filter.FailedCheckBox.Value
+     NoRunCheckBoxValue = Data_Form_Filter.NoRunCheckBox.Value
+     PassedCheckBoxValue = Data_Form_Filter.PassedCheckBox.Value
+     
+     DestinationWorkBookName = Data_Form_Filter.DestinationWorkBookName.Text
+     DestinationSheetName = Data_Form_Filter.DestinationSheetNameComboBox.Text
+     DestinationFilePath = Data_Form_Filter.DestinationFilePath.Text
+     QTestTestCycleIDValue = Data_Form_Filter.QTestTestCycleID.Text
+     ButtonNumber1 = 1
+     
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     '                                           TEST PARAMETERS                                             '
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     'Mandatory Fields Validation
+      If isWorkSheetExist(SourceSheetName) = False Then
+        MsgBox "Please Enter Correct Source WorkSheet Name !!!"
+      ElseIf RegressionFilterCheckBoxValue = False And InSprintFilterCheckBoxValue = False Then
+        MsgBox "Select At Least One Automation Status Filter Option !!!"
+      ElseIf FailedCheckBoxValue = False And NoRunCheckBoxValue = False And PassedCheckBoxValue = False Then
+        MsgBox "Select At Least One Browser Status Filter Option !!!"
+      ElseIf SourceSheetName = "" Then
+        MsgBox "Provide Source Sheet Name !!!"
+      ElseIf DestinationSheetName = "" Then
+        MsgBox "Provide Destination Sheet Name !!!"
+      ElseIf DestinationWorkBookName <> "Run Manager.xlsm" Then
+        MsgBox "Please Select Correct File(Run Manager.xlsm) !!!"
+      Else
+        'Unloads The User Form
+         Unload Data_Form_Filter
+      
+        Call Data_Form_Filter.CopyPassedTCsFiltered(SourceSheetName, BrowserVersionName, _
+        RegressionFilterCheckBoxValue, InSprintFilterCheckBoxValue, FailedCheckBoxValue, NoRunCheckBoxValue, _
+        DestinationSheetName, "", ButtonNumber1, _
+        DestinationWorkBookName, DestinationFilePath, PassedCheckBoxValue, QTestTestCycleIDValue)
+      End If
+    
+End Sub
+
+Private Sub EntireButton_Click()
+
+     Dim DestinationWorkBookName As String, DestinationSheetName As String, _
+     BrowserVersionName As String, ExecutionStatus As String, DestinationFilePath As String, _
+     RegressionFilterCheckBoxValue As String, InSprintFilterCheckBoxValue As String, _
+     QTestTestCycleIDValue As String
+     
+     Dim ButtonNumber2 As Integer
+     
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     '                                           TEST PARAMETERS                                             '
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     SourceSheetName = Data_Form_Filter.SourceSheetName.Text
+     BrowserVersionName = Data_Form_Filter.BrowserNameComboBox.Text
+     DestinationWorkBookName = Data_Form_Filter.DestinationWorkBookName.Text
+     DestinationSheetName = Data_Form_Filter.DestinationSheetNameComboBox.Text
+     DestinationFilePath = Data_Form_Filter.DestinationFilePath.Text
+     ExecutionStatus = Data_Form_Filter.ExecutionStatusComboBox.Text
+     RegressionFilterCheckBoxValue = Data_Form_Filter.RegressionFilterCheckBox.Value
+     InSprintFilterCheckBoxValue = Data_Form_Filter.InSprintFilterCheckBox.Value
+     QTestTestCycleIDValue = Data_Form_Filter.QTestTestCycleID.Text
+     ButtonNumber2 = 2
+         
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     '                                           TEST PARAMETERS                                             '
+     '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+     
+     'Mandatory Fields Validation
+'     MsgBox ("DestinationWorkBookName : " & DestinationWorkBookName)
+      If isWorkSheetExist(SourceSheetName) = False Then
+        MsgBox "Please Enter Correct Source WorkSheet Name !!!"
+      ElseIf DestinationWorkBookName <> "Run Manager.xlsm" Then
+        MsgBox "Please Select Correct File(Run Manager.xlsm) !!!" & vbNewLine & _
+        "Expected: Run Manager.xlsm; Actual: " & DestinationWorkBookName
+      Else
+        'Unloads The User Form
+         Unload Data_Form_Filter
+      
+        Call Data_Form_Filter.CopyPassedTCsFiltered(SourceSheetName, BrowserVersionName, _
+        RegressionFilterCheckBoxValue, InSprintFilterCheckBoxValue, "", "", _
+        DestinationSheetName, ExecutionStatus, ButtonNumber2, _
+        DestinationWorkBookName, DestinationFilePath, "", QTestTestCycleIDValue)
+      End If
+End Sub
+
+''''''''''''''''''''''''''''''''''''''' NEW CODE '''''''''''''''''''''''''''''''''''''''''''''''
+Function RemoveDupesColl(MyArray As Variant) As Variant
+'DESCRIPTION: Removes duplicates from your array using the collection method.
+'NOTES: (1) This function returns unique elements in your array, but
+' it converts your array elements to strings.
+'-----------------------------------------------------------------------
+    Dim i As Long
+    Dim arrColl As New Collection
+    Dim arrDummy() As Variant
+    Dim arrDummy1() As Variant
+    Dim item As Variant
+    ReDim arrDummy1(LBound(MyArray) To UBound(MyArray))
+
+    For i = LBound(MyArray) To UBound(MyArray) 'convert to string
+        arrDummy1(i) = CStr(MyArray(i))
+    Next i
+    On Error Resume Next
+    For Each item In arrDummy1
+       arrColl.Add item, item
+    Next item
+    Err.Clear
+    ReDim arrDummy(LBound(MyArray) To arrColl.count + LBound(MyArray) - 1)
+    i = LBound(MyArray)
+    For Each item In arrColl
+       arrDummy(i) = item
+       i = i + 1
+       MsgBox (arrDummy(i))
+    Next item
+    
+    RemoveDupesColl = arrDummy
+    
+End Function
+
+Function eliminateDuplicate(poArr As Variant) As Variant
+
+    Dim poArrNoDup()
+    Dim dupArrIndex As Long
+    Dim dupBool As Boolean
+    Dim i As Long
+    Dim j As Long
+    
+    dupArrIndex = -1
+    
+    For i = LBound(poArr) To UBound(poArr)
+        dupBool = False
+        For j = LBound(poArr) To i
+            If poArr(i) = poArr(j) And Not i = j Then
+                dupBool = True
+            End If
+        Next j
+
+        If dupBool = False Then
+            dupArrIndex = dupArrIndex + 1
+            ReDim Preserve poArrNoDup(dupArrIndex)
+            poArrNoDup(dupArrIndex) = poArr(i)
+        End If
+    Next i
+
+    eliminateDuplicate = poArrNoDup
+    
+End Function
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''

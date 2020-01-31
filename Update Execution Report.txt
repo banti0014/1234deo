@@ -1,0 +1,330 @@
+
+Dim curWorkbook As Workbook
+Dim curWorksheet As Worksheet
+Dim summaryWorksheet As Worksheet
+Dim reportWorkbook As Workbook
+Dim reportWorksheet As Worksheet
+Dim failedToUpdateWorksheet As Worksheet
+Public fail_count As Integer
+Public pass_count As Integer
+Dim errorMessage As String
+Dim counter As Long
+Dim rowsCount As Long
+Dim actualProgressBarWidth As Long
+
+Private Sub UserForm_Initialize()
+
+ Update_Execution_Report.BrowserList.List = Worksheets("ListSource").Range("H1:H15").Value
+ Update_Execution_Report.BrowserList.Text = Update_Execution_Report.BrowserList.List(0)
+
+ Submit.Enabled = False
+ errorMessage = ""
+ counter = 1
+ Update_Execution_Report.Bar.Visible = False
+ Update_Execution_Report.Text.Visible = False
+ Update_Execution_Report.Frame1.Visible = False
+ 
+ actualProgressBarWidth = Update_Execution_Report.Frame1.Width
+ 
+ With Update_Execution_Report.IterationList
+    .AddItem "Regression"
+    .AddItem "Regression_New"
+    .AddItem "Functional"
+    .AddItem "Functional_New"
+
+  Update_Execution_Report.IterationList.Text = Update_Execution_Report.IterationList.List(0)
+
+ End With
+ 
+End Sub
+
+Private Sub BrowserList_Change()
+  BrowserChange
+End Sub
+
+Private Sub BrowserChange()
+  UploadExecutionReport.Enabled = True
+End Sub
+
+Private Sub UploadExecutionReport_Click()
+
+Dim myFile As FileDialog
+Dim FileSelected As String, Arr() As String
+
+Set myFile = Application.FileDialog(msoFileDialogOpen)
+With myFile
+.Title = "Select Summary Report(Summary.xlsx)"
+.AllowMultiSelect = False
+.Filters.Clear
+.Filters.Add "Excel WorkBook", "*.xlsx"
+
+If .Show <> -1 Then
+Exit Sub
+End If
+FileSelected = .SelectedItems(1)
+End With
+
+'Display File Path of Source WorkBook
+Update_Execution_Report.ExecutionReportPath.Text = FileSelected
+Submit.Enabled = True
+      
+End Sub
+
+Private Sub Submit_Click()
+If isWorkSheetExist(Update_Execution_Report.IterationList.Value) = False Then
+ MsgBox "Please Enter Correct Source WorkSheet Name !!!"
+ElseIf PassedCheckBox.Value = "False" And FailedCheckBox.Value = "False" Then
+ MsgBox "Please Select At Least One Test Status Filter Option..."
+Else
+ Application.ScreenUpdating = False
+ UpdateExecutionReport
+ If errorMessage <> "" Then
+ MsgBox errorMessage
+ errorMessage = ""
+ Else
+ MsgBox "Total Execution Status Updated = " & pass_count & " , Failed To Update = " & fail_count
+ Unload Update_Execution_Report
+ End If
+End If
+
+End Sub
+
+Private Sub UpdateExecutionReport()
+ Set objExcel = CreateObject("Excel.Application")
+ On Error GoTo ErrorInFile
+ Set curWorkbook = objExcel.Workbooks.Open(ExecutionReportPath.Value)
+ Set curWorksheet = curWorkbook.Worksheets("Result_Summary")
+ Set summaryWorksheet = ActiveWorkbook.Worksheets("Summary_Regression")
+ 
+' If (Update_Execution_Report.IterationList.Value = "Regression") Then
+'  Set summaryWorksheet = ActiveWorkbook.Worksheets("Summary_Regression")
+' ElseIf (Update_Execution_Report.IterationList.Value = "Small_Screen") Then
+'  Set summaryWorksheet = ActiveWorkbook.Worksheets("Summary_Small_Screen")
+' ElseIf (Update_Execution_Report.IterationList.Value = "Smoke") Then
+'  Set summaryWorksheet = ActiveWorkbook.Worksheets("Summary_Smoke")
+' Else
+'  MsgBox "Please Provide Valid Input For IterationList Dropdown Field !!!"
+' End If
+
+ summaryWorksheet.Select
+
+ Dim updateStatus As Integer
+ Dim report_sheet_col_count As Long
+ Dim curATCName As String
+ 
+ fail_count = 0
+ pass_count = 0
+ 
+ Set reportWorksheet = ThisWorkbook.Worksheets(Trim(IterationList.Value))
+ 
+ testcaseColNumber = CurrentIndexRturner("Test_Case")
+ testcaseStatusColNumber = CurrentIndexRturner("Test_Status")
+ 
+  'Check if WorkSheet Exists
+    If isWorkSheetExist("Failed To Update TCs") Then
+    
+     'Delete Worksheet with previously stored data in Source WorkBook
+         removeWorkSheet ("Failed To Update TCs")
+      
+    End If
+    
+      'Create new WorkSheet in Destination Workbook
+      ThisWorkbook.Worksheets.Add(After:=Worksheets(Worksheets.count)).Name = "Failed To Update TCs"
+    
+    'Set Column Width for 'Failed To Update TCs' Sheet
+    Set failedToUpdateWorksheet = Sheets("Failed To Update TCs")
+    'failedToUpdateWorksheet.Select
+    
+   'Setting Column Width
+    Call SetColumnWidth(failedToUpdateWorksheet, "A")
+    Call SetColumnWidth(failedToUpdateWorksheet, "B")
+        
+    'Setting Column Names
+    failedToUpdateWorksheet.Cells(1, 1) = "AUTOMATION TEST CASE ID"
+    failedToUpdateWorksheet.Cells(1, 2) = "BROWSER STATUS"
+    
+    'Format Column Headers
+    For col = 1 To 2
+    Cells(1, col).Interior.Color = RGB(33, 89, 103)
+    Cells(1, col).Font.ColorIndex = 2
+    Cells(1, col).HorizontalAlignment = xlCenter
+    Next
+ 
+  'Find Column Numbers for Specific Columns in reportWorksheet
+    ATCColIndex = IndexReturner(reportWorksheet, "Auto_TS_ID_Desktop")
+    AutoStatusIndex = IndexReturner(reportWorksheet, "Auto_Status_Desktop")
+    
+    ATCBrowserIndex = IndexReturner(reportWorksheet, Trim(BrowserList.Value))
+    RegColIndex = IndexReturner(reportWorksheet, "Scope")
+    
+'    MsgBox "ATCColIndex : " & ATCColIndex & vbNewLine & _
+'    "AutoStatusIndex : " & AutoStatusIndex & vbNewLine & _
+'    "ATCBrowserIndex : " & ATCBrowserIndex & vbNewLine & _
+'    "RegColIndex : " & RegColIndex & vbNewLine
+
+ 
+  'Filter reportWorksheet for Test Cases with Regression Status: "Yes" and Automation Status: "Completed"
+    reportWorksheet.Select
+    reportWorksheet.AutoFilterMode = False
+    report_sheet_col_count = reportWorksheet.UsedRange.Columns.count
+   
+    reportWorksheet.Range(reportWorksheet.Cells(1, 1), _
+    reportWorksheet.Cells(1, report_sheet_col_count)).Select
+
+    Selection.AutoFilter
+    reportWorksheet.Range(reportWorksheet.Cells(1, RegColIndex), _
+      reportWorksheet.Cells(2, RegColIndex)) _
+       .AutoFilter Field:=RegColIndex, Criteria1:="=Regression"
+       
+    reportWorksheet.Range(reportWorksheet.Cells(1, AutoStatusIndex), _
+      reportWorksheet.Cells(2, AutoStatusIndex)) _
+       .AutoFilter Field:=AutoStatusIndex, Criteria1:="=Completed"
+       
+       'rowsCount shows current completion status on Progress Bar
+       rowsCount = curWorksheet.UsedRange.Rows.count
+ 
+ Dim isValidTCName As Integer
+ For i = 2 To rowsCount
+  curATCName = curWorksheet.Cells(i, testcaseColNumber).Value
+  isValidTCName = InStr(curATCName, "_ITR_")
+  
+  'Rename curATCName to remove Iteration Number appended to it
+  curATCName = refineName(curATCName)
+  
+  curATCStatus = curWorksheet.Cells(i, testcaseStatusColNumber).Value
+  
+   Update_Execution_Report.Bar.Visible = True
+   Update_Execution_Report.Text.Visible = True
+   Update_Execution_Report.Frame1.Visible = True
+ 
+  If (PassedCheckBox.Value = True And FailedCheckBox.Value = False And curATCStatus = "Passed") Or _
+     (PassedCheckBox.Value = False And FailedCheckBox.Value = True And curATCStatus = "Failed") Or _
+     (PassedCheckBox.Value = True And FailedCheckBox.Value = True) Then
+ 
+       updateStatus = 0
+       For j = 2 To reportWorksheet.UsedRange.Rows.count
+        If Trim(reportWorksheet.Cells(j, ATCColIndex).Value) = Trim(curATCName) _
+           And Trim(curATCName) <> "" _
+            And Trim(reportWorksheet.Cells(j, AutoStatusIndex).Value) = "Completed" Then
+             summaryWorksheet.Select
+             reportWorksheet.Cells(j, ATCBrowserIndex).Value = curATCStatus
+             updateStatus = 1
+             pass_count = pass_count + 1
+        End If
+       Next j
+      
+       'Updating "Failed To Update TCs" Sheet with Failed Test Cases
+         If updateStatus = 0 And isValidTCName <> 0 Then
+           summaryWorksheet.Select
+           fail_count = fail_count + 1
+           failedToUpdateWorksheet.Cells((fail_count + 1), 1) = curATCName
+           failedToUpdateWorksheet.Cells((fail_count + 1), 2) = curATCStatus
+         End If
+       End If
+       
+       'Displaying Progress Counter
+       progress counter
+       counter = counter + 1
+       
+ Next i
+ 
+ ThisWorkbook.Save
+ summaryWorksheet.Select
+ curWorkbook.Close
+' MsgBox "Total Execution Status Updated = " & pass_count & " , Failed To Update = " & fail_count
+ 
+ 'Release Resources
+ Set curWorkbook = Nothing
+ Set curWorsheet = Nothing
+ Set failedToUpdateWorksheet = Nothing
+ Set reportWorksheet = Nothing
+ 
+ Exit Sub
+
+ErrorInFile:
+  errorMessage = "Unable to open file."
+  Update_Execution_Report.Bar.Visible = False
+  Update_Execution_Report.Text.Visible = False
+  Update_Execution_Report.Frame1.Visible = False
+ 
+End Sub
+
+Function CurrentIndexRturner(str)
+For i = 1 To curWorksheet.UsedRange.Columns.count
+ If UCase(curWorksheet.Cells(1, i).Value) = UCase(Trim(str)) Then
+ CurrentIndexRturner = i
+ End If
+Next
+End Function
+
+Function IndexReturner(reportWorksheet, str)
+
+For i = 1 To reportWorksheet.UsedRange.Columns.count
+ If UCase(reportWorksheet.Cells(1, i).Value) = UCase(Trim(str)) Then
+ IndexReturner = i
+ End If
+Next
+
+End Function
+
+Sub SetColumnWidth(srcSheet As Worksheet, ColumnName As String)
+
+   With srcSheet.Columns(ColumnName)
+       .ColumnWidth = .ColumnWidth * 5
+   End With
+
+End Sub
+
+Function isWorkSheetExist(WorkSheetName As String) As Boolean
+ 
+  'Check if Workbook Exists
+    Dim wsSheet As Worksheet
+    Dim f As Boolean
+    
+    On Error Resume Next
+    Set wsSheet = Sheets(WorkSheetName)
+    On Error GoTo 0
+    If Not wsSheet Is Nothing Then
+      f = True
+    Else
+      f = False
+    End If
+
+    isWorkSheetExist = f
+
+End Function
+
+Sub removeWorkSheet(WorkSheetName As String)
+
+    Application.DisplayAlerts = False
+       Sheets(WorkSheetName).Delete
+    Application.DisplayAlerts = True
+    
+End Sub
+
+Function refineName(curATCName As String) As String
+
+ Dim message As String
+ 
+ If Trim(curATCName) <> "" Then
+    message = Split(curATCName, "_ITR")(0)
+    'Debug.Print message
+ Else
+    message = ""
+ End If
+ 
+ refineName = message
+ 
+End Function
+
+Sub progress(counter As Long)
+'Debug.Print actualProgressBarWidth
+If counter <= rowsCount Then
+Update_Execution_Report.Text.Caption = "Updating From " & counter & " out of " & (rowsCount - 1) & " Rows."
+'Debug.Print "Width = " & (actualProgressBarWidth / rowsCount) * counter
+Update_Execution_Report.Bar.Width = (actualProgressBarWidth / rowsCount) * counter
+DoEvents
+End If
+
+End Sub
+

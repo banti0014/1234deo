@@ -1,0 +1,791 @@
+
+Option Explicit
+Dim sourceWorkbook As Workbook
+Dim destinationWorkbook As Workbook
+Dim sourceWorksheet As Worksheet
+Dim destinationWorksheet As Worksheet
+Dim currentWorksheet As Worksheet
+Dim col As Integer
+
+Private Sub UserForm_Initialize()
+
+    With QTestDecoder.SourceSheetNameComboBox
+    .AddItem "Regression"
+    .AddItem "Functional"
+    
+    QTestDecoder.SourceSheetNameComboBox.Text = QTestDecoder.SourceSheetNameComboBox.List(0)
+    
+    End With
+    
+End Sub
+
+Sub removeWorkSheet(WorkSheetName As String)
+    Application.DisplayAlerts = False
+       Sheets(WorkSheetName).Delete
+    Application.DisplayAlerts = True
+
+End Sub
+
+Function isWorkSheetExist(WorkSheetName As String) As Boolean
+ 
+  'Check if Workbook Exists
+    Dim wsSheet As Worksheet
+    Dim f As Boolean
+    
+    On Error Resume Next
+    Set wsSheet = Sheets(WorkSheetName)
+    On Error GoTo 0
+    If Not wsSheet Is Nothing Then
+      f = True
+    Else
+      f = False
+    End If
+
+    isWorkSheetExist = f
+
+End Function
+
+Private Sub SourceFileDialogButton_Click()
+    
+    Dim myFile As FileDialog
+    Dim FileSelected As String, Arr() As String
+    
+    Set myFile = Application.FileDialog(msoFileDialogOpen)
+    With myFile
+    .Title = "Select Source WorkBook(Run Manager.xlsm)"
+    .AllowMultiSelect = False
+    .Filters.Clear
+    .Filters.Add "Excel WorkBook", "*.xlsm"
+    
+    If .Show <> -1 Then
+    Exit Sub
+    End If
+    FileSelected = .SelectedItems(1)
+    End With
+    
+    'Display File Path of Source WorkBook
+    QTestDecoder.SourceFilePath.Text = FileSelected 'The file path
+    
+    Arr() = Split(FileSelected, "\")
+    'Display Source WorkBook Name
+    QTestDecoder.SourceWorkBookName.Text = Arr(UBound(Arr))
+End Sub
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+Sub applyBorderToCell(formatWorksheet As Worksheet, destinationRowCount As Integer, colNumber As Integer)
+
+    formatWorksheet.Range(formatWorksheet.Cells(destinationRowCount, colNumber), _
+                        formatWorksheet.Cells(destinationRowCount, colNumber)).Select
+                        
+    Selection.Borders(xlDiagonalDown).LineStyle = xlNone
+    Selection.Borders(xlDiagonalUp).LineStyle = xlNone
+    With Selection.Borders(xlEdgeLeft)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeTop)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeBottom)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlEdgeRight)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlInsideVertical)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    With Selection.Borders(xlInsideHorizontal)
+        .LineStyle = xlContinuous
+        .ColorIndex = 0
+        .TintAndShade = 0
+        .Weight = xlThin
+    End With
+    
+End Sub
+
+Sub applyGreenColorToCell(formatWorksheet As Worksheet, destinationRowCount As Integer, colNumber As Integer)
+
+    formatWorksheet.Range(formatWorksheet.Cells(destinationRowCount, colNumber), _
+                        formatWorksheet.Cells(destinationRowCount, colNumber)).Select
+                        
+    With Selection.Interior
+        .Pattern = xlSolid
+        .PatternColorIndex = xlAutomatic
+        .Color = 9232568
+        .TintAndShade = 0
+        .PatternTintAndShade = 0
+    End With
+    
+End Sub
+
+Sub applyGreyColorToCell(formatWorksheet As Worksheet, destinationRowCount As Integer, colNumber As Integer)
+
+    formatWorksheet.Range(formatWorksheet.Cells(destinationRowCount, colNumber), _
+                        formatWorksheet.Cells(destinationRowCount, colNumber)).Select
+                            
+    With Selection.Interior
+        .Pattern = xlSolid
+        .PatternColorIndex = xlAutomatic
+        .ThemeColor = xlThemeColorDark1
+        .TintAndShade = -0.149998474074526
+        .PatternTintAndShade = 0
+    End With
+
+End Sub
+
+Sub applyBlueColorToCell(formatWorksheet As Worksheet, destinationRowCount As Integer, colNumber As Integer)
+
+    formatWorksheet.Range(formatWorksheet.Cells(destinationRowCount, colNumber), _
+                        formatWorksheet.Cells(destinationRowCount, colNumber)).Select
+                            
+    With Selection.Interior
+        .Pattern = xlSolid
+        .PatternColorIndex = xlAutomatic
+        .Color = 16763183
+        .TintAndShade = 0
+        .PatternTintAndShade = 0
+    End With
+
+End Sub
+
+Sub centerAlignCellContents(formatWorksheet As Worksheet, destinationRowCount As Integer, _
+    colNumber As Integer)
+
+    formatWorksheet.Range(formatWorksheet.Cells(destinationRowCount, colNumber), _
+                            formatWorksheet.Cells(destinationRowCount, colNumber)).Select
+
+    With Selection
+        .HorizontalAlignment = xlCenter
+        .VerticalAlignment = xlCenter
+        .wrapText = True
+        .Orientation = 0
+        .AddIndent = False
+        .IndentLevel = 0
+        .ShrinkToFit = False
+        .ReadingOrder = xlContext
+        .mergeCells = False
+    End With
+    
+End Sub
+
+Sub wordWrapRowContents(formatWorksheet As Worksheet, destinationRowCount As Integer)
+
+    formatWorksheet.Range(formatWorksheet.Cells(destinationRowCount, 1), _
+                            formatWorksheet.Cells(destinationRowCount, 11)).Select
+
+    With Selection
+        .HorizontalAlignment = xlLeft
+        .wrapText = True
+        .Orientation = 0
+        .AddIndent = False
+        .IndentLevel = 0
+        .ShrinkToFit = False
+        .ReadingOrder = xlContext
+        .mergeCells = False
+    End With
+    With Selection
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlBottom
+        .wrapText = True
+        .Orientation = 0
+        .AddIndent = False
+        .IndentLevel = 0
+        .ShrinkToFit = False
+        .ReadingOrder = xlContext
+        .mergeCells = False
+    End With
+    With Selection
+        .HorizontalAlignment = xlLeft
+        .VerticalAlignment = xlCenter
+        .wrapText = True
+        .Orientation = 0
+        .AddIndent = False
+        .IndentLevel = 0
+        .ShrinkToFit = False
+        .ReadingOrder = xlContext
+        .mergeCells = False
+    End With
+    
+    'Range("A11:I11").Select
+    
+    Rows(destinationRowCount & ":" & destinationRowCount).RowHeight = 25
+    
+End Sub
+
+Sub applyConditionalFormattingForExecutionStatus(colAlphabeticIndex As String, formatWorksheet As Worksheet, _
+    colNumber As Integer)
+
+    Columns(colAlphabeticIndex & ":" & colAlphabeticIndex).Select
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Failed"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13551615
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Passed"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16752384
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13561798
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Blocked"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16754788
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 10284031
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Unexecuted"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .ThemeColor = xlThemeColorDark1
+        .TintAndShade = -0.249946592608417
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    formatWorksheet.Range(formatWorksheet.Cells(2, colNumber), _
+                            formatWorksheet.Cells(2, colNumber)).Select
+    
+    Range(Selection, Selection.End(xlDown)).Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="=ListSource!$K$1:$K$4"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .errorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+    
+End Sub
+
+Sub applyConditionalFormattingForAutomationStatus(colAlphabeticIndex As String, formatWorksheet As Worksheet, _
+    colNumber As Integer)
+
+    Columns(colAlphabeticIndex & ":" & colAlphabeticIndex).Select
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Deprecated"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16383844
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13551615
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Completed"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16752384
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 13561798
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Blocked"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16754788
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 10284031
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Unexecuted"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .ThemeColor = xlThemeColorDark1
+        .TintAndShade = -0.249946592608417
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    formatWorksheet.Range(formatWorksheet.Cells(2, colNumber), _
+                            formatWorksheet.Cells(2, colNumber)).Select
+    
+    Range(Selection, Selection.End(xlDown)).Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="=ListSource!$D$1:$D$11"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .errorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+    
+End Sub
+
+Sub applyConditionalFormattingForScope(colAlphabeticIndex As String, formatWorksheet As Worksheet, _
+    colNumber As Integer)
+
+    Columns(colAlphabeticIndex & ":" & colAlphabeticIndex).Select
+    Range(Selection, Selection.End(xlDown)).Select
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Regression"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 15773696
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""In-Sprint"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .ThemeColor = xlThemeColorAccent6
+        .TintAndShade = 0.599963377788629
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    Selection.FormatConditions.Add Type:=xlCellValue, Operator:=xlEqual, _
+        Formula1:="=""Regression_API"""
+    Selection.FormatConditions(Selection.FormatConditions.count).SetFirstPriority
+    With Selection.FormatConditions(1).Font
+        .Color = -16754788
+        .TintAndShade = 0
+    End With
+    With Selection.FormatConditions(1).Interior
+        .PatternColorIndex = xlAutomatic
+        .Color = 10284031
+        .TintAndShade = 0
+    End With
+    Selection.FormatConditions(1).StopIfTrue = False
+    
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    formatWorksheet.Range(formatWorksheet.Cells(2, colNumber), _
+                            formatWorksheet.Cells(2, colNumber)).Select
+    
+    Range(Selection, Selection.End(xlDown)).Select
+    With Selection.Validation
+        .Delete
+        .Add Type:=xlValidateList, AlertStyle:=xlValidAlertStop, Operator:= _
+        xlBetween, Formula1:="=ListSource!$A$1:$A$3"
+        .IgnoreBlank = True
+        .InCellDropdown = True
+        .InputTitle = ""
+        .ErrorTitle = ""
+        .InputMessage = ""
+        .errorMessage = ""
+        .ShowInput = True
+        .ShowError = True
+    End With
+    
+End Sub
+
+Sub SetColumnWidth(srcSheet As Worksheet, ColumnName As String)
+
+   With srcSheet.Columns(ColumnName)
+       .ColumnWidth = .ColumnWidth * 5
+   End With
+
+End Sub
+
+Function FindColumnNumber(wsSheet As Worksheet, ColName As String) As Integer
+    Dim i As Integer, index As Integer
+    i = 0
+    index = 0
+    For i = 1 To 30
+     If ColName = wsSheet.Cells(1, i).Value Then
+       index = i
+       Exit For
+     End If
+    Next
+       ' MsgBox ColName & " Has Index ::: " & index
+    FindColumnNumber = index
+    
+End Function
+
+Private Sub qTestDescDecoderButton_Click()
+
+    Dim SourceWorkBookName As String, SourceSheetName As String, _
+    SourceFilePath As String, DestinationSheetName As String, _
+    DestinationWorkbookFilePath As String, dummySheetName As String
+    
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    '                                           TEST PARAMETERS                                             '
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    SourceWorkBookName = QTestDecoder.SourceWorkBookName.Text
+    
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    '                                           TEST PARAMETERS                                             '
+    '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+    
+    'Mandatory Fields Validation
+     If SourceWorkBookName <> "Run Manager.xlsm" Then
+       MsgBox "Please Select Correct File(Run Manager.xlsm) !!!" & vbNewLine & _
+       "Expected: Run Manager.xlsm; Actual: " & SourceWorkBookName
+     Else
+        ActiveWorkbook.CheckCompatibility = False
+        Application.DisplayAlerts = False
+        Application.ScreenUpdating = False
+        
+        SourceSheetName = QTestDecoder.SourceSheetNameComboBox.Text
+        SourceFilePath = QTestDecoder.SourceFilePath.Text
+        DestinationSheetName = Trim(SourceSheetName & "_New")
+        dummySheetName = Trim(SourceSheetName & "_Run_Manager")
+        
+        Set destinationWorkbook = ThisWorkbook
+        
+        'Check if WorkSheet Exists
+        If isWorkSheetExist(dummySheetName) Then
+            'Delete Worksheet with previously stored data in Source WorkBook
+            removeWorkSheet (dummySheetName)
+        End If
+            
+        If isWorkSheetExist(DestinationSheetName) = True Then
+            'Delete Worksheet with previously stored data in Source WorkBook
+            removeWorkSheet (DestinationSheetName)
+        End If
+          
+        'Create new WorkSheet in Destination Workbook
+        destinationWorkbook.Worksheets.Add(After:=Worksheets(Worksheets.count)).Name = DestinationSheetName
+        
+        Set currentWorksheet = Sheets(DestinationSheetName)
+        currentWorksheet.Select
+        
+        'Setting Column Width
+        Call SetColumnWidth(currentWorksheet, "A")
+        Call SetColumnWidth(currentWorksheet, "B")
+        Call SetColumnWidth(currentWorksheet, "C")
+        Call SetColumnWidth(currentWorksheet, "D")
+        Call SetColumnWidth(currentWorksheet, "E")
+        Call SetColumnWidth(currentWorksheet, "F")
+        Call SetColumnWidth(currentWorksheet, "G")
+        Call SetColumnWidth(currentWorksheet, "H")
+        Call SetColumnWidth(currentWorksheet, "I")
+        Call SetColumnWidth(currentWorksheet, "J")
+        Call SetColumnWidth(currentWorksheet, "K")
+        
+        'Setting Column Names
+        currentWorksheet.Cells(1, 1) = "S.NO"
+        currentWorksheet.Cells(1, 2) = "Functionality"
+        currentWorksheet.Cells(1, 3) = "UserStory"
+        currentWorksheet.Cells(1, 4) = "Auto_TS_ID_Desktop"
+        currentWorksheet.Cells(1, 5) = "F_TC_ID"
+        currentWorksheet.Cells(1, 6) = "Auto_Status_Desktop"
+        currentWorksheet.Cells(1, 7) = "Sprint Number"
+        currentWorksheet.Cells(1, 8) = "Execution_Status"
+        currentWorksheet.Cells(1, 9) = "Scope"
+        currentWorksheet.Cells(1, 10) = "QTestTCList"
+        currentWorksheet.Cells(1, 11) = "Comments"
+        
+        'Format Column Headers
+        For col = 1 To 11
+        Cells(1, col).Interior.Color = RGB(33, 89, 103)
+        Cells(1, col).Font.ColorIndex = 2
+        Cells(1, col).HorizontalAlignment = xlCenter
+        Next
+        
+        'Resize Column Width
+        Columns("A:A").ColumnWidth = 7.36
+        Columns("B:B").ColumnWidth = 16.73
+        Columns("C:C").ColumnWidth = 13.82
+        Columns("D:D").ColumnWidth = 44
+        Columns("E:E").ColumnWidth = 26.18
+        Columns("F:F").ColumnWidth = 24.09
+        Columns("F:F").ColumnWidth = 20.27
+        Columns("G:G").ColumnWidth = 16.27
+        Columns("H:H").ColumnWidth = 16.27
+        Columns("I:I").ColumnWidth = 12.27
+        Columns("I:I").ColumnWidth = 15.18
+        Columns("J:J").ColumnWidth = 31.55
+        Columns("K:K").ColumnWidth = 15.82
+        
+        'Apply Zoom Out On Current Sheet To 90%
+        ActiveWindow.Zoom = 90
+        
+        'Check if WorkSheet Exists
+         If isWorkSheetExist("QTest_Failed_Update") Then
+            'Delete Worksheet with previously stored data in Source WorkBook
+            removeWorkSheet ("QTest_Failed_Update")
+         End If
+          
+        'Create new WorkSheet in Source Workbook
+         destinationWorkbook.Worksheets.Add(After:=Worksheets(Worksheets.count)).Name = "QTest_Failed_Update"
+         
+         'Set Column Width for 'QTest_Failed_Update' Sheet
+         Set currentWorksheet = Sheets("QTest_Failed_Update")
+         currentWorksheet.Select
+         
+        'Setting Column Width
+         Call SetColumnWidth(currentWorksheet, "A")
+         Call SetColumnWidth(currentWorksheet, "B")
+          
+         'Setting Column Names
+         currentWorksheet.Cells(1, 1) = "Auto_TS_ID_Desktop"
+         currentWorksheet.Cells(1, 2) = "QTestTCList"
+          
+         'Format Column Headers
+         For col = 1 To 2
+         Cells(1, col).Interior.Color = RGB(33, 89, 103)
+         Cells(1, col).Font.ColorIndex = 2
+         Cells(1, col).HorizontalAlignment = xlCenter
+         Next
+         
+         DestinationWorkbookFilePath = Application.ActiveWorkbook.FullName
+                  
+        Workbooks.Open (SourceFilePath)
+        Set sourceWorkbook = ActiveWorkbook
+    
+        Set sourceWorksheet = Sheets(SourceSheetName)
+        sourceWorksheet.Select
+         
+         
+         
+        ''''''''''''''''''''''''''''''''''''''' Actual Code '''''''''''''''''''''''''''''''''
+        
+        
+    
+        'Variables Declaration
+        Dim sourceWorkbookFilePath As String
+        Dim source_sheet_row_count As Integer, i As Integer, j As Integer, _
+            k As Integer, source_sheet_col_count As Integer, Source_TestScenario_ColNumber As Integer, _
+            Source_TestCase_ColNumber As Integer, Source_QTestTCList_ColNumber As Integer
+        Dim qTestDescStr As String
+        Dim functionalTestCasesArr() As String
+        Dim functionalTestCasesCount As Integer
+        Dim failToUpdateCount As Integer
+        failToUpdateCount = 2
+        
+        Sheets(SourceSheetName).Copy Before:=Sheets(1)
+        Dim dummyName As String
+        
+        On Error GoTo ErrCatcher
+           dummyName = sourceWorkbook.Sheets(1).Name
+ErrCatcher:
+           dummyName = sourceWorkbook.Sheets(2).Name
+        
+        MsgBox ("dummyName : " & dummyName)
+        Sheets(dummyName).Select
+        Sheets(dummyName).Name = dummySheetName
+        Sheets(dummySheetName).Select
+        
+        ActiveSheet.Copy After:=destinationWorkbook. _
+                Sheets(destinationWorkbook.Worksheets.count)
+        
+        Set currentWorksheet = Sheets(DestinationSheetName)
+        currentWorksheet.Select
+        
+        'Windows(currentWorksheet).Activate
+        Set destinationWorkbook = ActiveWorkbook
+        
+        sourceWorkbook.Close SaveChanges:=False
+        
+        'Check if WorkSheet Exists
+        If isWorkSheetExist(dummySheetName) = True Then
+             Set sourceWorksheet = Sheets(dummySheetName)
+             sourceWorksheet.Select
+             
+             source_sheet_row_count = sourceWorksheet.UsedRange.Rows.count
+             source_sheet_col_count = sourceWorksheet.UsedRange.Columns.count
+             sourceWorksheet.AutoFilterMode = False
+             
+             Source_TestScenario_ColNumber = FindColumnNumber(sourceWorksheet, "TestScenario")
+             Source_TestCase_ColNumber = FindColumnNumber(sourceWorksheet, "TestCase")
+             Source_QTestTCList_ColNumber = FindColumnNumber(sourceWorksheet, "QTestTCList")
+                         
+             Dim functionality As String, automationTestCaseID As String, str As String
+             Dim destinationRowCount As Integer
+             destinationRowCount = 2
+             Dim tildeCounter As Integer
+             tildeCounter = 0
+             For i = 2 To source_sheet_row_count
+                functionality = sourceWorksheet.Cells(i, Source_TestScenario_ColNumber)
+                automationTestCaseID = sourceWorksheet.Cells(i, Source_TestCase_ColNumber)
+                qTestDescStr = LTrim(RTrim(((Trim(sourceWorksheet.Cells(i, Source_QTestTCList_ColNumber))))))
+                'qTestDescStr = Trim(sourceWorksheet.Cells(i, Source_QTestTCList_ColNumber))
+                If StrComp(qTestDescStr, "") <> 0 Then
+                
+                    functionalTestCasesCount = Len(qTestDescStr) - Len(Replace(qTestDescStr, "~", ""))
+                    
+                    If functionalTestCasesCount <> 0 Then
+                        functionalTestCasesArr = Split(qTestDescStr, "~")
+                    Else
+                        functionalTestCasesArr = Split(qTestDescStr & "~", "~")
+                    End If
+                    
+                    
+                
+'                    If InStr(LTrim(RTrim(((Trim(qTestDescStr))))), "~") <> 0 Then
+'                        functionalTestCasesArr = Split(LTrim(RTrim(((Trim(qTestDescStr))))), "~")
+'                    Else
+'                        functionalTestCasesArr = Split(LTrim(RTrim(((Trim(qTestDescStr))))) & "~", "~")
+'                    End If
+
+'                    functionalTestCasesCount = UBound(functionalTestCasesArr) - LBound(functionalTestCasesArr) + 1
+'
+'                    If functionalTestCasesCount = 2 Then
+'                        functionalTestCasesCount = 1
+'                        functionalTestCasesArr(0) = RTrim(LTrim(((Trim(functionalTestCasesArr(0))))))
+'                    End If
+                                
+                    'For j = 0 To (functionalTestCasesCount - 1)
+                    For j = 0 To functionalTestCasesCount
+                        
+                        Set currentWorksheet = Sheets(DestinationSheetName)
+                        currentWorksheet.Select
+                        currentWorksheet.AutoFilterMode = False
+                        currentWorksheet.Cells(destinationRowCount, 1) = (destinationRowCount - 1)
+                        currentWorksheet.Cells(destinationRowCount, 2) = Trim(functionality)
+                        currentWorksheet.Cells(destinationRowCount, 3) = ""
+                        currentWorksheet.Cells(destinationRowCount, 4) = Trim(automationTestCaseID)
+                        currentWorksheet.Cells(destinationRowCount, 5) = Trim(functionalTestCasesArr(j))
+                        currentWorksheet.Cells(destinationRowCount, 6) = "Completed"
+                        currentWorksheet.Cells(destinationRowCount, 7) = ""
+                        currentWorksheet.Cells(destinationRowCount, 8) = "Unexecuted"
+                        currentWorksheet.Cells(destinationRowCount, 9) = "Regression"
+                        currentWorksheet.Cells(destinationRowCount, 10) = qTestDescStr
+                        currentWorksheet.Cells(destinationRowCount, 11) = ""
+                        
+                        'Format Individual Column Accordingly
+                        
+                        Call wordWrapRowContents(currentWorksheet, destinationRowCount)
+                        
+                        'Apply Border For All Cells In The Row
+                        For k = 1 To 9
+                            Call applyBorderToCell(currentWorksheet, destinationRowCount, k)
+                        Next k
+                        
+                        'Apply Color Formatting To Automation Status Field
+                        Call centerAlignCellContents(currentWorksheet, destinationRowCount, 1)
+                        Call centerAlignCellContents(currentWorksheet, destinationRowCount, 6)
+                        Call centerAlignCellContents(currentWorksheet, destinationRowCount, 7)
+                        Call centerAlignCellContents(currentWorksheet, destinationRowCount, 8)
+                        Call centerAlignCellContents(currentWorksheet, destinationRowCount, 9)
+                        'Call applyGreenColorToCell(currentWorksheet, destinationRowCount, 6)
+                        'Call applyGreyColorToCell(currentWorksheet, destinationRowCount, 8)
+                        'Call applyBlueColorToCell(currentWorksheet, destinationRowCount, 9)
+                        
+                        destinationRowCount = destinationRowCount + 1
+                            
+                        Next j
+                Else
+                    Set currentWorksheet = Sheets("QTest_Failed_Update")
+                    currentWorksheet.Select
+                    currentWorksheet.AutoFilterMode = False
+                    currentWorksheet.Cells(failToUpdateCount, 1) = Trim(automationTestCaseID)
+                    currentWorksheet.Cells(failToUpdateCount, 2) = Trim(qTestDescStr)
+                    
+                    failToUpdateCount = failToUpdateCount + 1
+                    
+                End If
+            Next i
+            
+            Set currentWorksheet = Sheets(DestinationSheetName)
+            currentWorksheet.Select
+            Call applyConditionalFormattingForExecutionStatus("H", currentWorksheet, 8)
+            Call applyConditionalFormattingForAutomationStatus("F", currentWorksheet, 6)
+            Call applyConditionalFormattingForScope("I", currentWorksheet, 9)
+            
+            If failToUpdateCount > 2 Then
+                MsgBox ("Automation and Functional TCs Mapping Created but with failures. Failed To Update : " & (failToUpdateCount - 2))
+            Else
+                MsgBox ("Successfully Created Automation and Functional TCs Mapping Without Any Failures !!!")
+            End If
+            
+            'Check if WorkSheet Exists
+            If isWorkSheetExist(dummySheetName) Then
+                'Delete Worksheet with previously stored data in Source WorkBook
+                removeWorkSheet (dummySheetName)
+            End If
+                    
+            'Unloads The User Form
+            Unload QTestDecoder
+            
+            Else
+                MsgBox ("Expected Worksheet: '" & dummySheetName & "' DOES NOT Exists! Please Add This Sheet To Use This Macro.")
+            End If
+            
+            '''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+        End If
+ 
+End Sub
+
+'Public Function RemoveWhiteSpace(target As String) As String
+'    With New RegExp
+'        .Pattern = "\s"
+'        .MultiLine = True
+'        .Global = True
+'        RemoveWhiteSpace = .Replace(target, vbNullString)
+'    End With
+'End Function
+
+Function RemoveWhiteSpace(strs) As String
+    Dim str As String
+    Dim nstr As String
+    Dim sstr As String
+    Dim x As Integer
+    str = strs
+    
+    For x = 1 To VBA.Len(str)
+        sstr = Left(Mid(str, x), 1)
+        If sstr = " " Or sstr = " " Then
+        Else
+            nstr = nstr & "" & sstr
+        End If
+    
+    Next x
+    RemoveWhiteSpace = nstr
+End Function
